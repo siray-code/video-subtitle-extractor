@@ -19,7 +19,11 @@ from numpy import average, dot, linalg
 from tqdm import tqdm
 import sys
 
+# 指定GPU
+# os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+# 将当前目录加入环境变量
 sys.path.insert(0, os.path.dirname(__file__))
+
 import importlib
 import config
 from tools import reformat
@@ -32,7 +36,9 @@ import platform
 import multiprocessing
 import time
 import pysrt
+import configparser
 
+import ffmpeg
 
 class SubtitleDetect:
     """
@@ -185,6 +191,8 @@ class SubtitleExtractor:
             self.generate_subtitle_file()
         if config.WORD_SEGMENTATION:
             reformat.execute(os.path.join(os.path.splitext(self.video_path)[0] + '.srt'), config.REC_CHAR_TYPE)
+            # srt_path = os.path.join(os.path.dirname(self.video_path), "srt", os.path.splitext(os.path.basename(self.video_path))[0] + '.srt')
+            # reformat.execute(srt_patha, config.REC_CHAR_TYPE)
         print(config.interface_config['Main']['FinishGenerateSub'], f"{round(time.time() - start_time, 2)}s")
         self.update_progress(ocr=100, frame_extract=100)
         self.isFinished = True
@@ -1004,18 +1012,57 @@ class SubtitleExtractor:
                 f.write(f'{sub.text}\n')
 
 
+def read_config(filename):
+    config = configparser.ConfigParser()
+    config.read(filename)
+
+    settings = {}
+    if 'Settings' in config:
+        settings['xMinRatio'] = float(config['Settings'].get('xMinRatio', 0))
+        settings['xMaxRatio'] = float(config['Settings'].get('xMaxRatio', 90))
+        settings['yMinRatio'] = float(config['Settings'].get('yMinRatio', 0))
+        settings['yMaxRatio'] = float(config['Settings'].get('yMaxRatio', 100))
+
+    # 校验参数
+    if settings['xMinRatio'] < 0 or settings['xMinRatio'] > 100:
+        settings['xMinRatio'] = 0
+    if settings['xMaxRatio'] < 0 or settings['xMaxRatio'] > 100:
+        settings['xMaxRatio'] = 100
+    if settings['yMinRatio'] < 0 or settings['yMinRatio'] > 100:
+        settings['yMinRatio'] = 0
+    if settings['yMaxRatio'] < 0 or settings['yMaxRatio'] > 100:
+        settings['yMaxRatio'] = 100
+
+    return settings
+
 if __name__ == '__main__':
+    # 设置多进程启动方式
     multiprocessing.set_start_method("spawn")
-    # 提示用户输入视频路径
-    video_path = input(f"{config.interface_config['Main']['InputVideo']}").strip()
-    # 提示用户输入字幕区域
-    try:
-        y_min, y_max, x_min, x_max = map(int, input(
-            f"{config.interface_config['Main']['ChooseSubArea']} (ymin ymax xmin xmax)：").split())
-        subtitle_area = (y_min, y_max, x_min, x_max)
-    except ValueError as e:
-        subtitle_area = None
+
+    configPath = None
+    videoPath = None
+    for i in range(1, len(sys.argv)):
+        if sys.argv[i] == "--config":
+            configPath = sys.argv[i + 1]
+
+        if sys.argv[i] == "--video":
+            videoPath = sys.argv[i + 1]
+
+    with open(videoPath, 'r') as file:
+    # 读取文件内容
+        videoFile = str(file.read().strip())
+
+    probe = ffmpeg.probe(videoFile)
+    video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+    if video_stream:
+        width = int(video_stream['width'])
+        height = int(video_stream['height'])
+
+    # config_filename 由命令行参数指定
+    configLocal = read_config(configPath)
+    sub_area = (configLocal['yMinRatio'] * height / 100, configLocal['yMaxRatio'] * height / 100, configLocal['xMinRatio'] * width / 100, configLocal['xMaxRatio'] * width / 100)
+
     # 新建字幕提取对象
-    se = SubtitleExtractor(video_path, subtitle_area)
+    se = SubtitleExtractor(videoFile, sub_area)
     # 开始提取字幕
     se.run()

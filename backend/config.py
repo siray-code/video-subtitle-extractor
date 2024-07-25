@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-@Author  : Fang Yao 
+@Author  : Fang Yao
 @Time    : 2021/3/24 9:36 上午
 @FileName: config.py
 @desc: 项目配置文件，可以在这里调参，牺牲时间换取精确度，或者牺牲准确度换取时间
@@ -204,7 +204,7 @@ if REC_CHAR_TYPE in MULTI_LANG:
 
 # --------------------- 请根据自己的实际情况改 start-----------------
 # 是否生成TXT文本字幕
-GENERATE_TXT = True
+GENERATE_TXT = False
 
 # 每张图中同时识别6个文本框中的文本，GPU显存越大，该数值可以设置越大
 REC_BATCH_NUM = 6
