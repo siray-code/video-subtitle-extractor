@@ -1039,20 +1039,12 @@ if __name__ == '__main__':
     # 设置多进程启动方式
     multiprocessing.set_start_method("spawn")
 
-    configPath = None
-    videoPath = None
-    for i in range(1, len(sys.argv)):
-        if sys.argv[i] == "--config":
-            configPath = sys.argv[i + 1]
+    # 命令行参数
+    args = utility.parse_args()
+    configPath = args.run_config_path
+    videoPath = args.video_path
 
-        if sys.argv[i] == "--video":
-            videoPath = sys.argv[i + 1]
-
-    with open(videoPath, 'r') as file:
-    # 读取文件内容
-        videoFile = str(file.read().strip())
-
-    probe = ffmpeg.probe(videoFile)
+    probe = ffmpeg.probe(videoPath)
     video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
     if video_stream:
         width = int(video_stream['width'])
@@ -1063,6 +1055,6 @@ if __name__ == '__main__':
     sub_area = (configLocal['yMinRatio'] * height / 100, configLocal['yMaxRatio'] * height / 100, configLocal['xMinRatio'] * width / 100, configLocal['xMaxRatio'] * width / 100)
 
     # 新建字幕提取对象
-    se = SubtitleExtractor(videoFile, sub_area)
+    se = SubtitleExtractor(videoPath, sub_area)
     # 开始提取字幕
     se.run()

@@ -15,6 +15,7 @@ from pathlib import Path
 from fsplit.filesplit import Filesplit
 from paddle import fluid
 from tools.constant import *
+from tools.infer import utility
 
 
 # 项目的base目录
@@ -81,7 +82,9 @@ if fluid.is_compiled_with_cuda():
 
 # ×××××××××××××××××××× [不要改]读取语言、模型路径、字典路径 start ××××××××××××××××××××
 # 设置识别语言
-REC_CHAR_TYPE = settings_config['DEFAULT']['Language']
+args = utility.parse_args()
+REC_CHAR_TYPE = args.rec_char_type
+# REC_CHAR_TYPE = settings_config['DEFAULT']['Language']
 
 # 设置识别模式
 MODE_TYPE = settings_config['DEFAULT']['Mode']

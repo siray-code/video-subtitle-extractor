@@ -32,6 +32,12 @@ def str2bool(v):
 
 def init_args():
     parser = argparse.ArgumentParser()
+
+    # 运行时配置
+    parser.add_argument("--video_path", type=str, default=None)
+    parser.add_argument("--run_config_path", type=str, default=None)
+    parser.add_argument("--rec_char_type", type=str, default="en")
+
     # params for prediction engine
     parser.add_argument("--use_gpu", type=str2bool, default=True)
     parser.add_argument("--ir_optim", type=str2bool, default=True)
