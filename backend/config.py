@@ -82,8 +82,7 @@ if fluid.is_compiled_with_cuda():
 
 # ×××××××××××××××××××× [不要改]读取语言、模型路径、字典路径 start ××××××××××××××××××××
 # 设置识别语言
-args = utility.parse_args()
-REC_CHAR_TYPE = args.rec_char_type
+REC_CHAR_TYPE = 'en'
 # REC_CHAR_TYPE = settings_config['DEFAULT']['Language']
 
 # 设置识别模式

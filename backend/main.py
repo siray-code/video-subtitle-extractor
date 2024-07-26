@@ -104,7 +104,11 @@ class SubtitleExtractor:
         self.raw_subtitle_path = os.path.join(self.subtitle_output_dir, 'raw.txt')
         # 自定义ocr对象
         self.ocr = None
-        # 打印识别语言与识别模式
+        # 打印识别语言与识别模式、更新config.REC_CHAR_TYPE
+        args = utility.parse_args()
+        config_local = read_config(args.run_config_path)
+        config.REC_CHAR_TYPE = config_local['lang']
+
         print(f"{config.interface_config['Main']['RecSubLang']}：{config.REC_CHAR_TYPE}")
         print(f"{config.interface_config['Main']['RecMode']}：{config.MODE_TYPE}")
         # 如果使用GPU加速，则打印GPU加速提示
@@ -1022,6 +1026,7 @@ def read_config(filename):
         settings['xMaxRatio'] = float(config['Settings'].get('xMaxRatio', 90))
         settings['yMinRatio'] = float(config['Settings'].get('yMinRatio', 0))
         settings['yMaxRatio'] = float(config['Settings'].get('yMaxRatio', 100))
+        settings['lang'] = config['Settings'].get('lang', 'en')
 
     # 校验参数
     if settings['xMinRatio'] < 0 or settings['xMinRatio'] > 100:
@@ -1041,7 +1046,6 @@ if __name__ == '__main__':
 
     # 命令行参数
     args = utility.parse_args()
-    configPath = args.run_config_path
     videoPath = args.video_path
 
     probe = ffmpeg.probe(videoPath)
@@ -1051,7 +1055,7 @@ if __name__ == '__main__':
         height = int(video_stream['height'])
 
     # config_filename 由命令行参数指定
-    configLocal = read_config(configPath)
+    configLocal = read_config(args.run_config_path)
     sub_area = (configLocal['yMinRatio'] * height / 100, configLocal['yMaxRatio'] * height / 100, configLocal['xMinRatio'] * width / 100, configLocal['xMaxRatio'] * width / 100)
 
     # 新建字幕提取对象
