@@ -14,7 +14,7 @@ from threading import Thread
 from pathlib import Path
 import cv2
 from Levenshtein import ratio
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
 from numpy import average, dot, linalg
 from tqdm import tqdm
 import sys
@@ -82,9 +82,20 @@ class SubtitleExtractor:
         self.frame_count = self.video_cap.get(cv2.CAP_PROP_FRAME_COUNT)
         # 视频帧率
         self.fps = self.video_cap.get(cv2.CAP_PROP_FPS)
+        # 抽两秒识别一次
+        config.EXTRACT_FREQUENCY = self.fps
         # 视频尺寸
-        self.frame_height = int(self.video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.frame_width = int(self.video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        probe = ffmpeg.probe(self.video_path)
+        video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+        if video_stream:
+            width = int(video_stream['width'])
+            height = int(video_stream['height'])
+
+        self.frame_height = height
+        self.frame_width = width
+        # self.frame_height = int(self.video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        # self.frame_width = int(self.video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+
         # 用户未指定字幕区域时，默认字幕出现的区域
         self.default_subtitle_area = config.DEFAULT_SUBTITLE_AREA
         # 提取的视频帧储存目录
@@ -432,7 +443,8 @@ class SubtitleExtractor:
         if platform.system() == 'Windows':
             path_vsf = os.path.join(config.BASE_DIR, 'subfinder', 'windows', 'VideoSubFinderWXW.exe')
         else:
-            path_vsf = os.path.join(config.BASE_DIR, 'subfinder', 'linux', 'VideoSubFinderCli.run')
+            # path_vsf = os.path.join(config.BASE_DIR, 'subfinder', 'linux', 'VideoSubFinderCli.run')
+            path_vsf = os.path.join(config.BASE_DIR, 'VideoSubFinder', 'VideoSubFinderWXW.run')
             os.chmod(path_vsf, 0o775)
         # ：图像上半部分所占百分比，取值【0-1】
         top_end = 1 - self.sub_area[0] / self.frame_height
@@ -442,6 +454,13 @@ class SubtitleExtractor:
         left_end = self.sub_area[2] / self.frame_width
         # re：图像右半部分所占百分比，取值【0-1】
         right_end = self.sub_area[3] / self.frame_width
+
+        # 如过超过 1 则设置为1，如果小于0，则设置为0 (避免超出视频范围， videoSubFinder 会报错)
+        top_end = max(0, min(top_end, 1))
+        bottom_end = max(0, min(bottom_end, 1))
+        left_end = max(0, min(left_end, 1))
+        right_end = max(0, min(right_end, 1))
+
         cpu_count = max(int(multiprocessing.cpu_count() * 2 / 3), 1)
         if cpu_count < 4:
             cpu_count = max(multiprocessing.cpu_count() - 1, 1)
@@ -552,17 +571,23 @@ class SubtitleExtractor:
             print("Error in filter_scene_text: reading frame from video")
             return
 
+        # 图像预处理（增强对比度和亮度，去噪）
+        sample_frame = cv2.cvtColor(sample_frame, cv2.COLOR_BGR2GRAY)
+        sample_frame = cv2.equalizeHist(sample_frame)
+        sample_frame = cv2.GaussianBlur(sample_frame, (5, 5), 0)
+
         # 为了防止有双行字幕，根据容忍度，将字幕区域y范围加高
-        ymin = abs(subtitle_area[0] - config.SUBTITLE_AREA_DEVIATION_PIXEL)
-        ymax = subtitle_area[1] + config.SUBTITLE_AREA_DEVIATION_PIXEL
+        ymin = max(0, subtitle_area[0] - config.SUBTITLE_AREA_DEVIATION_PIXEL)
+        ymax = min(sample_frame.shape[0], subtitle_area[1] + config.SUBTITLE_AREA_DEVIATION_PIXEL)
+
         # 画出字幕框的区域
         cv2.rectangle(sample_frame, pt1=(0, ymin), pt2=(sample_frame.shape[1], ymax), color=(0, 0, 255), thickness=3)
         sample_frame_file_path = os.path.join(os.path.dirname(self.frame_output_dir), 'subtitle_area.jpg')
         cv2.imwrite(sample_frame_file_path, sample_frame)
         print(f"{config.interface_config['Main']['CheckSubArea']} {sample_frame_file_path}")
 
-        user_input = input(f"{(ymin, ymax)} {config.interface_config['Main']['DeleteNoSubArea']}").strip()
-        if user_input == 'y' or user_input == '\n':
+        user_input = input(f"Is the detected subtitle area correct? {ymin}-{ymax} (y/n): ").strip().lower()
+        if user_input == 'y' or user_input == '':
             with open(self.raw_subtitle_path, mode='r+', encoding='utf-8') as f:
                 content = f.readlines()
                 f.seek(0)
@@ -573,6 +598,9 @@ class SubtitleExtractor:
                         f.write(i)
                 f.truncate()
             print(config.interface_config['Main']['FinishDeleteNoSubArea'])
+        else:
+            print("Subtitle area not confirmed by user.")
+
         # 删除缓存
         if os.path.exists(sample_frame_file_path):
             os.remove(sample_frame_file_path)
@@ -862,7 +890,7 @@ class SubtitleExtractor:
             for pixel_tuple in image.getdata():
                 vector.append(average(pixel_tuple))
             vectors.append(vector)
-            # linalg=linear（线性）+algebra（代数），norm则表示范数
+            # linalg = linear（线性）+ algebra（代数），norm则表示范数
             # 求图片的范数
             norms.append(linalg.norm(vector, 2))
         a, b = vectors
@@ -934,15 +962,28 @@ class SubtitleExtractor:
             abs(coordinate1[3] - coordinate2[3]) < config.PIXEL_TOLERANCE_Y
 
     @staticmethod
-    def __get_thum(image, size=(64, 64), greyscale=False):
+    def __get_thum(image, size=(64, 64), greyscale=False, contrast_factor=1.5):
         """
         对图片进行统一化处理
         """
-        # 利用image对图像大小重新设置, Image.ANTIALIAS为高质量的
-        image = image.resize(size, Image.ANTIALIAS)
+        # 调整图像大小
+        image = image.resize(size, Image.LANCZOS)
+
+        # 增强对比度
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(contrast_factor)
+
+        # 去噪处理（可选）
+        image = image.filter(ImageFilter.MedianFilter())
+
         if greyscale:
-            # 将图片转换为L模式，其为灰度图，其每个像素用8个bit表示
+            # 将图片转换为灰度图
             image = image.convert('L')
+
+        # 二值化处理
+        threshold = 128
+        image = image.point(lambda p: p > threshold and 255)
+
         return image
 
     def __delete_frame_cache(self):
@@ -1027,6 +1068,10 @@ def read_config(filename):
         settings['yMinRatio'] = float(config['Settings'].get('yMinRatio', 0))
         settings['yMaxRatio'] = float(config['Settings'].get('yMaxRatio', 100))
         settings['lang'] = config['Settings'].get('lang', 'en')
+        settings['x_min'] = float(config['Settings'].get('x_min', 0))
+        settings['y_min'] = float(config['Settings'].get('y_min', 0))
+        settings['x_max'] = float(config['Settings'].get('x_max', 0))
+        settings['y_max'] = float(config['Settings'].get('y_max', 0))
 
     # 校验参数
     if settings['xMinRatio'] < 0 or settings['xMinRatio'] > 100:
@@ -1048,15 +1093,20 @@ if __name__ == '__main__':
     args = utility.parse_args()
     videoPath = args.video_path
 
-    probe = ffmpeg.probe(videoPath)
-    video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-    if video_stream:
-        width = int(video_stream['width'])
-        height = int(video_stream['height'])
+    # probe = ffmpeg.probe(videoPath)
+    # video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+    # if video_stream:
+    #     width = int(video_stream['width'])
+    #     height = int(video_stream['height'])
 
     # config_filename 由命令行参数指定
     configLocal = read_config(args.run_config_path)
-    sub_area = (configLocal['yMinRatio'] * height / 100, configLocal['yMaxRatio'] * height / 100, configLocal['xMinRatio'] * width / 100, configLocal['xMaxRatio'] * width / 100)
+
+    # sub_area = (configLocal['yMinRatio'] * height / 100, configLocal['yMaxRatio'] * height / 100, configLocal['xMinRatio'] * width / 100, configLocal['xMaxRatio'] * width / 100)
+    sub_area = (configLocal['y_min'], configLocal['y_max'], configLocal['x_min'], configLocal['x_max'])
+
+    # 打印日志
+    print(f"Subtitle Area: {sub_area}")
 
     # 新建字幕提取对象
     se = SubtitleExtractor(videoPath, sub_area)
