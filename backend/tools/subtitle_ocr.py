@@ -140,12 +140,13 @@ def ocr_task_consumer(ocr_queue, raw_subtitle_path, sub_area, video_path, option
             try:
                 frame_no, frame, dt_box, rec_res = ocr_queue.get(block=True)
                 if frame_no == -1:
+                    print("接收到结束信号，退出消费者线程")
                     return
                 data['i'] = frame_no
                 extract_subtitles(data, text_recogniser, frame, raw_subtitle_file, sub_area, options, dt_box,
                                   rec_res, ocr_loss_debug_path)
             except Exception as e:
-                print(e)
+                print(f"处理帧 {data['i']} 时发生错误: {e}")
                 break
 
 
@@ -173,6 +174,7 @@ def ocr_task_producer(ocr_queue, task_queue, progress_queue, video_path, raw_sub
                 ocr_queue.put((-1, None, None, None))
                 # 更新进度条
                 tbar.update(tbar.total - tbar.n)
+                print("所有视频帧已处理完毕，退出生产者线程")
                 break
             tbar.update(round(current_frame_no - tbar.n))
             # 设置当前视频帧
@@ -191,8 +193,11 @@ def ocr_task_producer(ocr_queue, task_queue, progress_queue, video_path, raw_sub
                 if default_subtitle_area is not None:
                     frame = frame_preprocess(default_subtitle_area, frame)
                 ocr_queue.put((current_frame_no, frame, dt_box, rec_res))
+            else:
+                print(f"读取帧 {current_frame_no} 失败")
         except Exception as e:
             print(e)
+            print(f"处理帧 {current_frame_no} 时发生错误")
             break
     cap.release()
 

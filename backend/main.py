@@ -18,11 +18,15 @@ from PIL import Image, ImageEnhance, ImageFilter
 from numpy import average, dot, linalg
 from tqdm import tqdm
 import sys
+import multiprocessing
+import signal
 
 # 指定GPU
 # os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 # 将当前目录加入环境变量
 sys.path.insert(0, os.path.dirname(__file__))
+
+os.environ['FLAGS_use_cuda_managed_memory'] = 'false'
 
 import importlib
 import config
@@ -82,19 +86,11 @@ class SubtitleExtractor:
         self.frame_count = self.video_cap.get(cv2.CAP_PROP_FRAME_COUNT)
         # 视频帧率
         self.fps = self.video_cap.get(cv2.CAP_PROP_FPS)
-
+        # 拿视频帧率取OCR识别，避免遗漏了字幕帧数
+        #config.EXTRACT_FREQUENCY = self.fps
         # 视频尺寸
-        # probe = ffmpeg.probe(self.video_path)
-        # video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-        # if video_stream:
-        #     width = int(video_stream['width'])
-        #     height = int(video_stream['height'])
-
-        # self.frame_height = height
-        # self.frame_width = width
         self.frame_height = int(self.video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.frame_width = int(self.video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-
         # 用户未指定字幕区域时，默认字幕出现的区域
         self.default_subtitle_area = config.DEFAULT_SUBTITLE_AREA
         # 提取的视频帧储存目录
@@ -443,6 +439,7 @@ class SubtitleExtractor:
             path_vsf = os.path.join(config.BASE_DIR, 'subfinder', 'windows', 'VideoSubFinderWXW.exe')
         else:
             path_vsf = os.path.join(config.BASE_DIR, 'subfinder', 'linux', 'VideoSubFinderCli.run')
+            #path_vsf = os.path.join(config.BASE_DIR, 'VideoSubFinder', 'VideoSubFinderWXW.run')
             os.chmod(path_vsf, 0o775)
         # ：图像上半部分所占百分比，取值【0-1】
         top_end = 1 - self.sub_area[0] / self.frame_height
@@ -1062,6 +1059,24 @@ def read_config(filename):
 
     return settings
 
+# 设置一个定时器，脚本超过10min这个执行时间，就自动杀死
+def worker(video_path, sub_area):
+    se = SubtitleExtractor(video_path, sub_area)
+    se.run()
+
+def run_with_timeout(video_path, sub_area, timeout=600):
+    process = multiprocessing.Process(target=worker, args=(video_path, sub_area))
+    process.start()
+    process.join(timeout)
+
+    if process.is_alive():
+        print("程序执行超时,正在终止...")
+        process.terminate()
+        process.join()
+        print("程序已终止")
+        return False
+    return True
+
 if __name__ == '__main__':
     # 设置多进程启动方式
     multiprocessing.set_start_method("spawn")
@@ -1083,8 +1098,14 @@ if __name__ == '__main__':
 
     print(f"Subtitle Area: {sub_area}")
     print(f"video path : {videoPath}")
+
+    success = run_with_timeout(videoPath, sub_area)
+    if not success:
+        print("字幕提取失败,程序已超时")
+    else:
+        print("字幕提取成功完成")
     # 新建字幕提取对象
-    se = SubtitleExtractor(videoPath, sub_area)
+    # se = SubtitleExtractor(videoPath, sub_area)
     # 开始提取字幕
-    se.run()
+    # se.run()
 
