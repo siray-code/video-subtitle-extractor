@@ -1085,11 +1085,11 @@ if __name__ == '__main__':
     args = utility.parse_args()
     videoPath = args.video_path
 
-    probe = ffmpeg.probe(videoPath)
-    video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-    if video_stream:
-        width = int(video_stream['width'])
-        height = int(video_stream['height'])
+    # probe = ffmpeg.probe(videoPath)
+    # video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+    # if video_stream:
+    #     width = int(video_stream['width'])
+    #     height = int(video_stream['height'])
 
     # config_filename 由命令行参数指定
     configLocal = read_config(args.run_config_path)
