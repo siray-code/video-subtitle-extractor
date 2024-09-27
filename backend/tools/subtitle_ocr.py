@@ -195,6 +195,9 @@ def ocr_task_producer(ocr_queue, task_queue, progress_queue, video_path, raw_sub
                 ocr_queue.put((current_frame_no, frame, dt_box, rec_res))
             else:
                 print(f"读取帧 {current_frame_no} 失败")
+        # 如果为空
+        except queue.Empty:
+            continue
         except Exception as e:
             print(e)
             print(f"处理帧 {current_frame_no} 时发生错误")

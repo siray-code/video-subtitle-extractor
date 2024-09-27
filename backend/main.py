@@ -20,6 +20,7 @@ from tqdm import tqdm
 import sys
 import multiprocessing
 import signal
+import json
 
 # 指定GPU
 # os.environ["CUDA_VISIBLE_DEVICES"] = "4"
@@ -455,6 +456,7 @@ class SubtitleExtractor:
         left_end = max(0, min(left_end, 1))
         right_end = max(0, min(right_end, 1))
 
+        # cpu_count：cpu核数，取值为cpu核数*2/3与1的最大值
         cpu_count = max(int(multiprocessing.cpu_count() * 2 / 3), 1)
         if cpu_count < 4:
             cpu_count = max(multiprocessing.cpu_count() - 1, 1)
@@ -473,7 +475,7 @@ class SubtitleExtractor:
             cmd = f"{path_vsf} -c -r -i \"{self.video_path}\" -o \"{self.temp_output_dir}\" -ces \"{self.vsf_subtitle}\" "
             if config.USE_GPU:
                 cmd += "--use_cuda "
-            cmd += f"-te {top_end} -be {bottom_end} -le {left_end} -re {right_end} -nthr {cpu_count} "#-dsi"
+            cmd += f"-te {top_end} -be {bottom_end} -le {left_end} -re {right_end} -nthr {cpu_count} -dsi"
             self.vsf_running = True
             print(f"Command: {cmd}")
             import subprocess
@@ -1031,31 +1033,20 @@ class SubtitleExtractor:
 
 
 def read_config(filename):
-    config = configparser.ConfigParser()
-    config.read(filename)
+    with open(filename, 'r') as config_file:
+        config = json.load(config_file)
 
-    settings = {}
-    if 'Settings' in config:
-        settings['xMinRatio'] = float(config['Settings'].get('xMinRatio', 0))
-        settings['xMaxRatio'] = float(config['Settings'].get('xMaxRatio', 90))
-        settings['yMinRatio'] = float(config['Settings'].get('yMinRatio', 0))
-        settings['yMaxRatio'] = float(config['Settings'].get('yMaxRatio', 100))
-        settings['lang'] = config['Settings'].get('lang', 'en')
-        settings['x_min'] = float(config['Settings'].get('x_min', 0))
-        settings['y_min'] = float(config['Settings'].get('y_min', 0))
-        settings['x_max'] = float(config['Settings'].get('x_max', 0))
-        settings['y_max'] = float(config['Settings'].get('y_max', 0))
-
-    # 校验参数
-    #if settings['xMinRatio'] < 0 or settings['xMinRatio'] > 100:
-    #    settings['xMinRatio'] = 0
-    #if settings['xMaxRatio'] < 0 or settings['xMaxRatio'] > 100:
-    #    settings['xMaxRatio'] = 100
-    #if settings['yMinRatio'] < 0 or settings['yMinRatio'] > 100:
-    #    settings['yMinRatio'] = 0
-    #if settings['yMaxRatio'] < 0 or settings['yMaxRatio'] > 100:
-    #    settings['yMaxRatio'] = 100
-    #
+    settings = {
+        'xMinRatio': float(config.get('xMinRatio', 0)),
+        'xMaxRatio': float(config.get('xMaxRatio', 90)),
+        'yMinRatio': float(config.get('yMinRatio', 0)),
+        'yMaxRatio': float(config.get('yMaxRatio', 100)),
+        'lang': config.get('lang', 'ch'),
+        'x_min': float(config.get('x_min', 0)),
+        'y_min': float(config.get('y_min', 0)),
+        'x_max': float(config.get('x_max', 0)),
+        'y_max': float(config.get('y_max', 0))
+    }
 
     return settings
 
@@ -1101,9 +1092,9 @@ if __name__ == '__main__':
 
     success = run_with_timeout(videoPath, sub_area)
     if not success:
-        print("字幕提取失败,程序已超时")
+        print(f"{videoPath} 字幕提取失败,程序已超时")
     else:
-        print("字幕提取成功完成")
+        print(f"{videoPath} 字幕提取成功完成")
     # 新建字幕提取对象
     # se = SubtitleExtractor(videoPath, sub_area)
     # 开始提取字幕

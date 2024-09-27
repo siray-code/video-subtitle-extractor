@@ -209,9 +209,9 @@ if REC_CHAR_TYPE in MULTI_LANG:
 GENERATE_TXT = False
 
 # 每张图中同时识别6个文本框中的文本，GPU显存越大，该数值可以设置越大
-REC_BATCH_NUM = 6
+REC_BATCH_NUM = 1
 # DB算法每个batch识别多少张，默认为10
-MAX_BATCH_SIZE = 10
+MAX_BATCH_SIZE = 50
 
 # 默认字幕出现区域为下方
 DEFAULT_SUBTITLE_AREA = SubtitleArea.UNKNOWN
@@ -236,7 +236,7 @@ WATERMARK_AREA_NUM = 5
 THRESHOLD_TEXT_SIMILARITY = 0.8
 
 # 字幕提取中置信度低于0.75的不要
-DROP_SCORE = 0.75
+DROP_SCORE = 0.70
 
 # 字幕区域允许偏差, 0为不允许越界, 0.03表示可以越界3%
 SUB_AREA_DEVIATION_RATE = 0
