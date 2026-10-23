@@ -1055,7 +1055,7 @@ def worker(video_path, sub_area):
     se = SubtitleExtractor(video_path, sub_area)
     se.run()
 
-def run_with_timeout(video_path, sub_area, timeout=600):
+def run_with_timeout(video_path, sub_area, timeout=6000):
     process = multiprocessing.Process(target=worker, args=(video_path, sub_area))
     process.start()
     process.join(timeout)
